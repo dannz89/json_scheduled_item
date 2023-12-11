@@ -234,8 +234,8 @@ function getNumberOfDaysInMonth(date){
     return d.getDate();
 }
 
-function validateScheduleItem(scheduleItem){
-    if(!ajv.validate(getValidationSchema(),JSON.stringify(scheduleItem))) {
+function validateScheduleItem(validationSchema,scheduleItem){
+    if(!ajv.validate(validationSchema,JSON.stringify(scheduleItem))) {
         console.warn(`Item [${scheduleItem}] not a valid schedule item.`);
         return false;
     }
@@ -256,3 +256,4 @@ async function getValidationSchema() {
 }
 
 const scheduleItemSchema = getValidationSchema();
+// Tests go here.
