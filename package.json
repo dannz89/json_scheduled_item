@@ -1,0 +1,18 @@
+{
+  "name": "json_schema",
+  "version": "1.0.0",
+  "description": "Sample JSON-schema validator",
+  "main": "index.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "json_schema"
+  },
+  "author": "Dan Williams",
+  "license": "ISC",
+  "dependencies": {
+    "ajv": "^8.12.0"
+  }
+}

@@ -1,0 +1,136 @@
+{
+	"$schema": "http://json-schema.org/draft-04/schema#",
+	"title": "Timeslot",
+	"description": "Schedule item for calendar component and back-end handling.",
+	"type": "object",
+	"required":["startTime","endTime","timeZone","occurrences"],
+	"properties": {
+		"starTime": {
+			"type": "string",
+			"format": "time"
+		},
+		"endTime": {
+			"type": "string",
+			"format": "time"
+		},
+		"timZone": "string",
+		"occurrences": {
+			"type": "object",
+			"oneOf": [
+				{"required": ["once"]},
+				{"required": ["repeats"]}
+			],
+			"properties": {
+				"once": {
+					"type": "object",
+					"required": ["date"],
+					"properties": {
+						"date": {
+							"type": "string",
+							"format": "date"
+						}
+					}
+				},
+				"repeats": {
+					"type":"object",
+					"oneOf":[
+						{"required": ["daily"]},
+						{"required": ["weekly"]},
+						{"required": ["monthly"]},
+						{"required": ["annually"]}
+					],
+					"properties":{
+						"ends": {
+							"type": "object",
+							"oneOf": [
+								{"required": ["endDate"]},
+								{"required": ["afterNumberOfTimes"]}
+							],
+							"required":["startDate"],
+							"properties": {
+								"startDate": {
+									"type": "string",
+									"format": "date"
+								},
+								"endDate": {
+									"type": "string",
+									"format": "date"
+								},
+								"afterNumberOfTimes": {
+									"type": "integer",
+									"minimum": 1
+								}
+							}
+						},
+						"daily": {
+							"type": "boolean"
+						},
+						"weekly": {
+							"type": "object",
+							"required": ["weekdays"],
+							"properties": {
+								"weekdays": {
+									"type": "array",
+									"items": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 6
+									},
+									"minitems": 1,
+									"maxitems": 7,
+									"uniqueitems": true
+								}
+							}
+						},
+						"monthly": {
+							"type": "object",
+							"oneOf": [
+								{"required": ["nthWeekDayOfMonth"]},
+								{"required": ["dateInMonth"]}
+							],
+							"properties": {
+								"nthWeekDayOfMonth": {
+									"type": "object",
+									"required": ["nDay","weekDay"],
+									"properties": {
+											"nDay": {
+												"type": "integer",
+												"minimum": 1,
+												"maximum": 5
+											},
+											"weekDay": {
+												"type": "integer",
+												"minimum": 0,
+												"maximum": 6
+											}
+									}
+								},
+								"dateInMonth": {
+									"type": "integer",
+									"minimum": 1,
+									"maximum": 31
+								}
+							}
+						}
+						},
+						"annually": {
+							"type": "object",
+							"required": ["month","day"],
+							"properties": {
+								"month": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 11
+								},
+								"day": {
+										"type": "integer",
+										"minimum": 1,
+										"maximum": 31
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
