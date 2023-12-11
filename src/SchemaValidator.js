@@ -94,7 +94,7 @@ function showItem(scheduleItem,date) {
  * @param {*} scheduleItem 
  * @param {*} date 
  */
-function checkItemOccurrences(scheduleItem,date) {
+function showRepeatingItem(scheduleItem,date) {
     // Check if checkDate is greater than the end date and if it is, do not show the item. 
     // If checkDate <= endDate then, we fall back on checking the other criteria using showItem() and return its return value.
     if(item['occurrences']['repeats']['ends']['endDate']) {
@@ -114,12 +114,15 @@ function checkItemOccurrences(scheduleItem,date) {
 
 /**
  * Utility function to calculate and set the end date on a scheduleItem if it has the 
- * 'afterNumberOftimes' property set and based upon its other schedule criteria.
+ * 'afterNumberOftimes' property set and based upon its other schedule criteria. Assumes
+ * the scheduleItem is valid.
  * @param {*} scheduleItem 
- * @returns 
+ * @returns a new ScheduledItem with the enddate set.
  */
-function calculateItemEndDateFromNumberOfOccurrences(scheduleItem) {
+function setEndDateOnRepeatingItem(scheduleItem) {
     const afterNumberOfTimes = scheduleItem["occurrences"]["repeats"]["ends"]["afterNumberOfTimes"];
+    
+    // We do this to create a deep copy of the scheduled item.
     let newScheduleItem = JSON.parse(JSON.stringify(scheduleItem));
     
     // This field is mandatory if 'ends' is set. The scheduleItem JSON would have 
@@ -131,9 +134,10 @@ function calculateItemEndDateFromNumberOfOccurrences(scheduleItem) {
     startDate.setHours(0,0,0,0);
     
     // Easiest calculation. If the item occurs daily then its endDate will be:
-    // startDate + number of daily occurrences.
+    // startDate + (number of daily occurrences - 1). the -1 is because the start date is 
+    // included.
     if(scheduleItem['occurrences']['repeats']['daily']) {
-        endDate = new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+afterNumberOfTimes,0,0,0,0);
+        endDate = new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+(afterNumberOfTimes-1),0,0,0,0);
         newScheduleItem['occurrences']['repeats']['ends']['endDate'] = endDate;
         return newScheduleItem;
     }
@@ -143,15 +147,16 @@ function calculateItemEndDateFromNumberOfOccurrences(scheduleItem) {
     // example, if the item is scheduled for Mon, Tue, Fri each week and occurs 5 times then
     // it will occur on Mon, Tue, Fri for five weeks. So if its first occurrence was in the week
     // beginning Mon 11th Dec 2023, then it would occur for all off the five weeks from Mon
-    // 11th Dec 2023 up to and include the week beginning Mon 8th Jan 2024. Thus, it's end date
-    // would be Fri 12th Jan 2024 (the last weekday on which it showed on the schedule).
+    // 11th Dec 2023 up to and including the week beginning Mon 8th Jan 2024. Thus, it's end 
+    // date would be Fri 12th Jan 2024 (the last weekday on which it showed on the schedule).
     if(scheduleItem['occurrences']['repeats']['weekly']) {
-        const greatestWeekDay = scheduleItem['occurrences']['repeats']['weekly']['weekdays'][scheduleItem['occurrences']['repeats']['weekly']['weekdays'].lenth()-1];
+        const greatestWeekDay = scheduleItem['occurrences']['repeats']['weekly']['weekdays'][scheduleItem['occurrences']['repeats']['weekly']['weekdays'].length()-1];
 
-        // The number of days is days-in-week * required number of occurrences.
-        const daysToAdd = afterNumberOfTimes * 7;
+        // The number of days is days-in-week * required number of occurrences-1 since the
+        // first week (startDate) counts as one occurrence.
+        const daysToAdd = (afterNumberOfTimes-1) * 7;
 
-        endDate = new Date(startDate.getFullYear(),startDate.getMonth(),startDate.getDate()+daysToAdd);
+        endDate = new Date(startDate.getFullYear(),startDate.getMonth(),(startDate.getDate()+(greatestWeekDay-startDate.getDay()))+daysToAdd);
 
         newScheduleItem['occurrences']['repeats']['ends']['endDate'] = endDate;
         return newScheduleItem;
