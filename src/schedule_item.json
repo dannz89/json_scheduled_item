@@ -78,9 +78,9 @@
 										"minimum": 0,
 										"maximum": 6
 									},
-									"minitems": 1,
-									"maxitems": 7,
-									"uniqueitems": true
+									"minItems": 1,
+									"maxItems": 7,
+									"uniqueItems": true
 								}
 							}
 						},
