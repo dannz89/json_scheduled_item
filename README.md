@@ -1,6 +1,6 @@
 <h1>Scheduled Item JSON schema test code</h1>
 
-This code is mainly to test the validation and use of JSON schema included in the JSON schema file: <a href=schedule_item.json>schedule_item.json</a>.
+This code is mainly to test the validation and use of JSON schema included in the JSON schema file: <a href="https://github.com/dannz89/json_scheduled_item/blob/master/src/schedule_item.json">schedule_item.json</a>.
 
 The JS implementation of the validation using this schema uses the Ajiv module (npm install ajiv).
 
