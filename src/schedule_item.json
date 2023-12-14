@@ -5,7 +5,7 @@
 	"type": "object",
 	"required":["startTime","endTime","timeZone","occurrences"],
 	"properties": {
-		"starTime": {
+		"startTime": {
 			"type": "string",
 			"format": "time"
 		},
@@ -13,7 +13,9 @@
 			"type": "string",
 			"format": "time"
 		},
-		"timZone": "string",
+		"timeZone": {
+			"type": "string"
+		},
 		"occurrences": {
 			"type": "object",
 			"oneOf": [

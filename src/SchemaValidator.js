@@ -1,23 +1,9 @@
-import Ajv from "ajv";
+import Ajv from 'ajv';
+import { existsSync, readFile } from 'fs';
+import AddDraft04 from 'ajv-draft-04';
+import draft04MetaSchema from './schema-draft-04.json' assert {type: "json"};
+import scheduleItemSchema from './schedule_item.json' assert {type: "json"};
 
-const fs = require('fs');
-const ajv = new Ajv();
-
-function readAFile(fileName) {
-    if(!fs.existsSync(fileName)) throw new Error(`File ${fileName} does not exist.`);
-
-    return new Promise((resolve, reject) => {
-        fs.readFile(fileName, (err, data) => {
-            console.log(`Reading file ${fileName}`);
-
-            if (err) {
-                reject(`Failed to read data from ${fileName}`);
-            } else {
-                resolve(data.toString("utf-8"));
-            }
-        });
-    });
-}
 
 /**
  * Determine whether the schedule item should display on the date supplied. Returns true if the 
@@ -242,18 +228,49 @@ function validateScheduleItem(validationSchema,scheduleItem){
 }
 
 
-async function getValidationSchema() {
-    let schema;
-    let schemaFile = "schedule_item.json";
+function readAFile(fileName) {
+    if(!existsSync(fileName)) throw new Error(`File ${fileName} does not exist.`);
 
-    try {
-        schema = await readAFile(schemaFile);
-    } catch (err) {
-        throw err;
-    }
+    return new Promise((resolve, reject) => {
+        readFile(fileName, (err, data) => {
+            console.log(`Reading file ${fileName}`);
 
-    return schema;
+            if (err) {
+                reject(`Failed to read data from ${fileName}`);
+            } else {
+                resolve(data.toString("utf-8"));
+            }
+        });
+    });
 }
 
-const scheduleItemSchema = getValidationSchema();
+
+async function getValidationSchema() {
+    let schema;
+    let schemaFile = "src/schedule_item.json";
+    let testFile = "src/mock_schedule_items.json";
+    let tests = [];
+    let testFileData;
+
+    const ajv = new AddDraft04();
+    //ajv.addMetaSchema(draft04MetaSchema);
+    ajv.addSchema(scheduleItemSchema,'scheduleItemSchema');
+    console.log (ajv.validateSchema(scheduleItemSchema) ? "Schema is valid." : "Schema is invalid.");
+    
+    try{
+        testFileData = await readAFile(testFile);
+    } catch(e){
+        throw e;
+    }
+
+    tests = JSON.parse(testFileData);
+
+    tests.forEach(test => console.log (ajv.validate(schema,test) ? "pass" : "fail" ));
+}
+
+
+
+getValidationSchema();
+
+
 // Tests go here.

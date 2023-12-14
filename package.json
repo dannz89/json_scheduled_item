@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Sample JSON-schema validator",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "test": "test"
   },
@@ -13,6 +14,7 @@
   "author": "Dan Williams",
   "license": "ISC",
   "dependencies": {
-    "ajv": "^8.12.0"
+    "ajv": "^8.12.0",
+    "ajv-draft-04": "^1.0.0"
   }
 }
