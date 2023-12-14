@@ -246,15 +246,29 @@ function readAFile(fileName) {
 
 
 async function getValidationSchema() {
-    let schema;
-    let schemaFile = "src/schedule_item.json";
     let testFile = "src/mock_schedule_items.json";
     let tests = [];
     let testFileData;
 
-    const ajv = new AddDraft04();
-    //ajv.addMetaSchema(draft04MetaSchema);
-    ajv.addSchema(scheduleItemSchema,'scheduleItemSchema');
+    const ajv = new AddDraft04({"strict": false});
+    
+    // Custom format validator for 'date' (YYYY-MM-DD)
+    ajv.addFormat('date', {
+            type: 'string',
+            validate: (dateFormat) => {
+            return /^(\d{4})-(\d{2})-(\d{2})$/.test(dateFormat);
+        }
+    });
+
+    // Custom format validator for 'time' (HH:MM)
+    ajv.addFormat('time', {
+        type: 'string',
+        validate: (timeFormat) => {
+            return /^([01]\d|2[0-3]):([0-5]\d)$/.test(timeFormat);
+        }
+    });
+    
+    //ajv.addSchema(scheduleItemSchema,'scheduleItemSchema');
     console.log (ajv.validateSchema(scheduleItemSchema) ? "Schema is valid." : "Schema is invalid.");
     
     try{
@@ -263,9 +277,11 @@ async function getValidationSchema() {
         throw e;
     }
 
+    console.log(`Preparing to validate ${testFileData}`);
+
     tests = JSON.parse(testFileData);
 
-    tests.forEach(test => console.log (ajv.validate(schema,test) ? "pass" : "fail" ));
+    tests.forEach(test => console.log (ajv.validate(scheduleItemSchema,test) ? "pass" : "fail" ));
 }
 
 
