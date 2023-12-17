@@ -1,119 +1,111 @@
 import Ajv from 'ajv';
 import { existsSync, readFile } from 'fs';
 import AddDraft04 from 'ajv-draft-04';
-import draft04MetaSchema from './schema-draft-04.json' assert {type: "json"};
 import scheduleItemSchema from './schedule_item.json' assert {type: "json"};
+import { start } from 'repl';
+
 
 
 /**
  * Determine whether the schedule item should display on the date supplied. Returns true if the 
- * date matches the item's criteria else false.
+ * date matches the item's criteria else false. A schedule item object validated against the
+ * schedule item schema then JSON.parse'd into an object is assumed.
  * @param {*} scheduleItem 
  * @param {*} date 
  * @returns 
  */
 function showItem(scheduleItem,date) {
     const checkDate = new Date(date);
+    console.log(`DEBUG: checkDate = ${checkDate}`);
+    
+    // Create a deep copy to keep the function pure.
+    let itemToCheck = JSON.parse(JSON.stringify(scheduleItem));
 
     // If the item appears once and its date is the same as today, display it.
-    if(scheduleItem['occurrences']['once']) {
-        const scheduleDate = new Date(scheduleItem['occurrences']['once']['date']);
+    if(itemToCheck['occurrences']['once']) {
+        const scheduleDate = new Date(itemToCheck['occurrences']['once']['date']);
         return (scheduleDate.getFullYear() === checkDate.getFullYear()
             && scheduleDate.getMonth() === checkDate.getMonth()
             && scheduleDate.getDate() === checkDate.getDate());
     }
 
+    // If an item is set to occur nTimes then all that really matters is its end date. So
+    // we call the setEndDateOnRepeatingItem to calculate and set the end date then we just
+    // carry out all other checks as usual.
+    if(itemToCheck['occurrences']['repeats']['ends']['afterNumberOfTimes']){
+        itemToCheck = setEndDateOnRepeatingItem(itemToCheck);
+    }
+
     // If the item has an end date and the check date is greater, do not diplay it.
-    if(scheduleItem['occurrences']['repeats']['ends']['endDate']){
-        const endDate = new Date(scheduleItem['occurrences']['repeats']['ends']['endDate']);
-        return checkDate > endDate;
+    if(itemToCheck['occurrences']['repeats']['ends']['endDate']){
+        const endDate = new Date(itemToCheck['occurrences']['repeats']['ends']['endDate']);
+        if(checkDate > endDate) return false;
     }
 
 
     // If the item is set to display every day, display it.
-    if(scheduleItem['occurrences']['repeats']['daily']) return true;
+    if(itemToCheck['occurrences']['repeats']['daily']) return true;
 
     // If the item displays weekly and checkDate is one of its designated weekdays, display it.
-    if(scheduleItem['occurrences']['repeats']['weekly']) {
-        scheduleItem['occurrences']['repeats']['weekly']['weekdays'].forEach(weekDay => {
-            return (weekDay === checkDate.getDay());
+    // Otherwise definitely don't.
+    if(itemToCheck['occurrences']['repeats']['weekly']) {
+        let startDate = new Date(itemToCheck['occurrences']['repeats']['ends']['startDate']);
+        let startDateFound = false;
+        for(let wd in itemToCheck['occurrences']['repeats']['weekly']['weekdays']){
+            if(startDate.getDay() === new Date(wd).getDay()){
+                startDateFound = true;
+                break;
+            }
+        }
+        // Those meddling kids! Set a start date that wasn't one of the allowed week days.
+        // But I will not be tricked!
+        if(!startDateFound){
+            throw new Error("Start date ["+startDate+"] not one of allowed week days. Invalid schedule item.");
+        }
+
+        itemToCheck['occurrences']['repeats']['weekly']['weekdays'].forEach(weekDay => {
+            if (weekDay === checkDate.getDay()) return true;
         });
+        return false;
     }
 
     // If the item is set to display on the nth weekDay of the month (e.g. 1st Tuesday) and checkDate === this day, then display it. Note that the year part of the date is irrelevant.
-    if(scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']){
-        const nDay = scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['nDay'];
-        const weekDay = scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['weekDay'];
+    if(itemToCheck['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']){
+        const nDay = itemToCheck['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['nDay'];
+        const weekDay = itemToCheck['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['weekDay'];
 
-        const numDaysinMonth = getNumberOfDaysInMonth(checkDate);
-        
-        let n = 0;
+        const [checkNDay,checkWeekDay] = getNthWeekDayInMonth(checkDate);
 
-        for(let day = 1; day < numDaysinMonth; day++){
-            // If the date we are checking is today and it's the week-day component of the schedule item then increment the 'hit' counter.
-            n += (checkDate.getDate() === day && checkDate.getDay() === weekDay) ? 1 : 0;
-            
-            // If checkDate's date is 'today' and it's the schedule item's weekday and it's the schedule item's nth weekday of month then we are good to display the item.
-            if(checkDate.getDate() == day
-                && checkDate.getDay() == weekDay 
-                && n == nDay) return true;
-        }
-        // If we exited the loop without a hit, then 'today' (checkDat.getDate()) is not the nth
-        // weekDay of the month.
-        return false;
+        return (checkNDay === nDay && checkWeekDay === weekDay);
     }
-}
-
-/**
- * If a schedule item is set to occur a certain number of times or up to and including an
- * end date, then all other checks per showItem() are applied to it iteratively to see if it has
- * met its end date or number of occurrences criteria. 
- * ASSUMPTION: Although the scheduleItem has an 'afterNumberOfTimes' field, this will only be 
- * used as an indicator to developers with its endDate calculated at the intiaal creation based 
- * upon the start date, occurrence criteria for the item and the number of occurrences. 
- * For example, if the item is set to occur on 'nthWeekDayOfMonthy' beginning on the first
- * Tuesday in February and for every first Tuesday of every month with 5 occurrences, then the 
- * endDate (inclusive) should be set to the first Tuesday of June (for 2024, this would be Tue
- * 4th June 2024). So all this function needs to check is whether the item has passed its 
- * endDate rather than calculating whether it has 'occurred' according to its 
- * 'afterNumberOfTimes'. That should have been set up when the item was origionally created.
- * @param {*} scheduleItem 
- * @param {*} date 
- */
-function showRepeatingItem(scheduleItem,date) {
-    // Check if checkDate is greater than the end date and if it is, do not show the item. 
-    // If checkDate <= endDate then, we fall back on checking the other criteria using showItem() and return its return value.
-    if(item['occurrences']['repeats']['ends']['endDate']) {
-        const endDate = new Date(item['occurrences']['repeats']['ends']['endDate']);
-        
-        // We don't care about the time, only the date. And we take no chances when it comes to
-        // what was stored in the database / set by the previous developer or transferred across
-        // the network.
-        date.setHours(0,0,0,0);
-        checkDate.setHours(0,0,0,0);
-        if(date > checkDate) return false;
-
-        return showItem(scheduleItem,date);
-    }
-
 }
 
 /**
  * Utility function to calculate and set the end date on a scheduleItem if it has the 
  * 'afterNumberOftimes' property set and based upon its other schedule criteria. Assumes
- * the scheduleItem is valid.
+ * the scheduleItem is valid per the schedule item schema.
  * @param {*} scheduleItem 
  * @returns a new ScheduledItem with the enddate set.
  */
 function setEndDateOnRepeatingItem(scheduleItem) {
+    
+    // This should never happen. This function shoiuld only be called on pre-checked
+    // schedule items. But just in case, return the original object, unchanged.
+    if(!scheduleItem['occurrences']['repeats']['ends']['afterNumberOfTimes']){
+        console.log(`DEBUG 4: Schedule item has no number of times set`);
+        return scheduleItem;
+    }
+
+    // If the schema was validated, this will be a number.
     const afterNumberOfTimes = scheduleItem["occurrences"]["repeats"]["ends"]["afterNumberOfTimes"];
     
-    // We do this to create a deep copy of the scheduled item.
+    // We do this to create a deep copy of the scheduled item and keep this function pure.
     let newScheduleItem = JSON.parse(JSON.stringify(scheduleItem));
     
     // This field is mandatory if 'ends' is set. The scheduleItem JSON would have 
     // failed validation if the ends property existed and no startDate property existed.
     const startDate = new Date(scheduleItem["occurrences"]["repeats"]["ends"]["startDate"]);
+    
     let endDate;
     
     // Take no chances with time setting.
@@ -132,11 +124,11 @@ function setEndDateOnRepeatingItem(scheduleItem) {
     // assumption is that a single occurrence is a whole week's worth of occurrences. For 
     // example, if the item is scheduled for Mon, Tue, Fri each week and occurs 5 times then
     // it will occur on Mon, Tue, Fri for five weeks. So if its first occurrence was in the week
-    // beginning Mon 11th Dec 2023, then it would occur for all off the five weeks from Mon
+    // beginning Mon 11th Dec 2023, then it would occur for all of the five weeks from Mon
     // 11th Dec 2023 up to and including the week beginning Mon 8th Jan 2024. Thus, it's end 
-    // date would be Fri 12th Jan 2024 (the last weekday on which it showed on the schedule).
+    // date would be Fri 12th Jan 2024 (the last weekday on which it should show on a UI).
     if(scheduleItem['occurrences']['repeats']['weekly']) {
-        const greatestWeekDay = scheduleItem['occurrences']['repeats']['weekly']['weekdays'][scheduleItem['occurrences']['repeats']['weekly']['weekdays'].length()-1];
+        const greatestWeekDay = scheduleItem['occurrences']['repeats']['weekly']['weekdays'][scheduleItem['occurrences']['repeats']['weekly']['weekdays'].length-1];
 
         // The number of days is days-in-week * required number of occurrences-1 since the
         // first week (startDate) counts as one occurrence.
@@ -152,24 +144,38 @@ function setEndDateOnRepeatingItem(scheduleItem) {
     // then the number of occurrences is assumed to be 'afterNumberOfTimes' months from and
     // including the start date. For example if 'afterNumberOftimes' === 5 and the schedule 
     // item start date was Tue 5th Dec 2023, then its final occurrence (endDate) would be Tue 
-    // 30th April 2024. There are no 5th Tuesdays.
+    // 30th April 2024. 
     // 
     // Note that in Jan, Feb & Mar 2024 thare no 'fifth Tuesdays' but those months are still 
     // counted as 'occurrences'.
     //
     // For this reason, we must iterate through each momth to find the actual 
     // end date (which is equal to the last day on which the schedule item will appear on the 
-    // schedule - showItem()===true). This is because even though the schedule is set to occur, 
-    // for example, 5 times, if the nthWeekDayOfMonth value approaches the end of a momth, or 
-    // is a 'higher'number, each month is less likely to have that day (e.g. a fifth Tuesday) 
-    // so there may be fewer actual occurrences thatn the schedule items's specific 'requested' 
-    // value of occurrences. For the same reason, if the final month(s) do not have the nth
-    // weekday specified, the last occurrences will be the latest month within 
-    // 'afterNumberOfTimes' months where the nth weekDay is present.
+    // schedule - (showItem()===true). This is because even though the schedule is set to 
+    // occur, for example, 5 times, if the nthWeekDayOfMonth value approaches the end of a 
+    // momth, or is a 'higher'number (4-5), each month is less likely to have that day (e.g. 
+    // a fifth Tuesday) so there may be fewer actual occurrences than the schedule items's 
+    // specific 'requested' value of occurrences. For the same reason, if the final month(s) do 
+    // not have the nth weekday specified, the last occurrences will be the latest month within 
+    // 'afterNumberOfTimes' months where the nth weekDay is present; which could be earlier 
+    // than the number of months 'requested'.
     if(scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']){
+        // Developers are vile creatures and they cheat and the they trick with impunity.
+        // Because of their untrustworthy nature, we must check that whoever passed the schedule
+        // item to this function set a startDate that was indeed itself the nth week day of the
+        // month as stipulated by the occurrences settings. The schema validation does not
+        // chceck for this so the schema could have passed validation and still have a start
+        // date that does not match the nDay / weekDay settings.
+        const startDate = new Date(scheduleItem['occurrences']['repeats']['ends']['startDate']);
+        
+        let [startNDay,startWeekday] = getNthWeekDayInMonth(startDate);
+
         const nDay = scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['nDay'];
         const weekDay = scheduleItem['occurrences']['repeats']['monthly']['nthWeekDayOfMonth']['weekDay'];
-        
+
+        //  If this does not throw an error, we can continue calculating the end date.
+        if(startNDay !== nDay || startWeekday !== weekDay) throw new Error("Invalid startDate / repeats in schema.");
+
         // Be careful here! It is not only a case of adding 'afterNumberOftimes' months to the
         // start date's month because that might take us into another year. Let JS date handle
         // the calculation. Now we are in the right month, we just have to find the 
@@ -178,9 +184,9 @@ function setEndDateOnRepeatingItem(scheduleItem) {
         // afterNumberOftimes-1 (since startDate already counts as 1 occurrence) to the months. 
         
         // First day of last potential month.
-        let maximumPossibleEndMonth = new Date(startDate.getFullYear(),startDate.getMonth()+(afterNumberOfTimes-1),1,0,0,0,0);
+        let maximumPossibleEndDate = new Date(startDate.getFullYear(),startDate.getMonth()+(afterNumberOfTimes-1),1,0,0,0,0);
         
-        // We want this to be undefined (falsy).
+        // We want this to be undefined (falsy) to start with.
         let realEndDate;
         
         // Count the months backwards until we hit one that has the nth weekday requested. That
@@ -188,7 +194,7 @@ function setEndDateOnRepeatingItem(scheduleItem) {
         while(!realEndDate) {
            let nDayCount = 0;
            
-           for(let start = new Date(maximumPossibleEndMonth); start.getMonth()===maximumPossibleEndMonth.getMonth(); start.setDate((start.getDate()+1))) {
+           for(let start = new Date(maximumPossibleEndDate); start.getMonth()===maximumPossibleEndDate.getMonth(); start.setDate((start.getDate()+1))) {
             nDayCount += (start.getDay()===weekDay) ? 1 : 0;
             if(nDayCount === nDay) {
                 realEndDate = new Date(start);
@@ -197,7 +203,7 @@ function setEndDateOnRepeatingItem(scheduleItem) {
            }
 
            // If we still haven't found the last occurrence, decrement the month.
-           if(!realEndDate) maximumPossibleEndMonth.setMonth(maximumPossibleEndMonth.getMonth()-1);
+           if(!realEndDate) maximumPossibleEndDate.setMonth(maximumPossibleEndDate.getMonth()-1);
         }
 
         // realEndDate will always get set eventually because at least startDate (the very 
@@ -220,14 +226,30 @@ function getNumberOfDaysInMonth(date){
     return d.getDate();
 }
 
-function validateScheduleItem(validationSchema,scheduleItem){
-    if(!ajv.validate(validationSchema,JSON.stringify(scheduleItem))) {
-        console.warn(`Item [${scheduleItem}] not a valid schedule item.`);
-        return false;
+/**
+ * For the given date, works out which n and weekday (e.g. 3rd Wednesday), this date is.
+ * Returns a 2-element array containg [n,weekDay].
+ */
+function getNthWeekDayInMonth(date){
+    const checkDate = new Date(date);
+    const daysInMonth = getNumberOfDaysInMonth(checkDate);
+    const weekDay = checkDate.getDay();
+    let nDay=0;
+    let i=1;
+    
+    while (i<=daysInMonth){
+        nDay += (new Date(checkDate.getFullYear(),checkDate.getMonth(),i).getDay()===weekDay) ? 1 : 0;
+        if (i===checkDate.getDate()) return [nDay,weekDay];
+        i++;
     }
 }
 
 
+/**
+ * Reads in a file and returns a Promise with the result.
+ * @param {*} fileName 
+ * @returns 
+ */
 function readAFile(fileName) {
     if(!existsSync(fileName)) throw new Error(`File ${fileName} does not exist.`);
 
@@ -244,8 +266,12 @@ function readAFile(fileName) {
     });
 }
 
-
-async function getValidationSchema() {
+/**
+ * Tests validity of schedule items in test file by.
+ * 1. Validating against the schedule_item JSON schema.
+ * 2. Testsing thoe show()
+ */
+async function testScheduleItems() {
     let testFile = "src/mock_schedule_items.json";
     let tests = [];
     let testFileData;
@@ -277,16 +303,26 @@ async function getValidationSchema() {
         throw e;
     }
 
-    console.log(`Preparing to validate ${testFileData}`);
-
     tests = JSON.parse(testFileData);
 
-    tests.forEach(test => console.log (ajv.validate(scheduleItemSchema,test) ? "pass" : "fail" ));
+    const testDate = new Date();
+
+    tests.forEach(test => {
+        console.log(`Testing: ${test['description']}`);
+        //console.log (ajv.validate(scheduleItemSchema,test) ? "pass" : "fail" )
+        if(ajv.validate(scheduleItemSchema,test)){
+            try{
+                console.log(`show: ${showItem(test,testDate)}`);
+            } catch (e){
+                console.log(`Threw ${e} checking dates on schedule item.`);
+            }
+        } else {
+           console.log(`Skipping ${JSON.stringify(test)} because it is not a valid schedule item format.`);
+        }
+    });
 }
 
-
-
-getValidationSchema();
+testScheduleItems();
 
 
 // Tests go here.
