@@ -1,9 +1,6 @@
-import Ajv from 'ajv';
 import { existsSync, readFile } from 'fs';
 import AddDraft04 from 'ajv-draft-04';
 import scheduleItemSchema from './schedule_item.json' assert {type: "json"};
-import { start } from 'repl';
-
 
 
 /**
@@ -246,7 +243,8 @@ function getNthWeekDayInMonth(date){
 
 
 /**
- * Reads in a file and returns a Promise with the result.
+ * Reads in a file and returns a Promise, in practice, the data or an 
+ * throws an error.
  * @param {*} fileName 
  * @returns 
  */
@@ -323,6 +321,3 @@ async function testScheduleItems() {
 }
 
 testScheduleItems();
-
-
-// Tests go here.
