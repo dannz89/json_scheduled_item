@@ -13,3 +13,6 @@ Feel free to copy and use as is with no guarantees.
 **TODO:**
 1. Implement in JAVA
 2. Add JAVA and JS test cases.
+3. Further encapsulate validation logic which Ajiv / JSON schema can't handle namely:
+    3.1. start date vs repetitions which do not match
+4. More testing.
